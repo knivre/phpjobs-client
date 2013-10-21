@@ -1,0 +1,215 @@
+#!/usr/bin/perl -w
+use strict;
+use Getopt::Long qw(:config gnu_getopt);
+use Term::ReadLine;
+use Term::ReadPassword;
+use PHPJobs::System::Client;
+use PHPJobs::System::Config;
+
+# TODO pod documentation
+
+# As for most Unix programs, the default, hardcoded behaviour gets overridden by
+# environment, configuration file and command line options, in that order.
+
+my $target;
+my $secret;
+
+# Default options
+my $batch = 0;
+my $debug = 0;
+
+# Parse command-line options, taking --batch and --debug directly into account
+my $cmdline_conf_file_path;
+my %cmdline_extra_headers;
+my $cmdline_secure;
+my $cmdline_read_secret_from;
+exit(1) unless GetOptions(
+	'b|batch' => \$batch,
+	'c|conf-file=s' => \$cmdline_conf_file_path,
+	'd|debug!' => \$debug,
+	'H|extra-header=s' => \%cmdline_extra_headers,
+	'secure!' => \$cmdline_secure,
+	'read-secret-from=s' => \$cmdline_read_secret_from,
+);
+
+# there must remain at least one argument: the target
+&usage() unless (@ARGV);
+$target = shift;
+
+# other arguments are supposed to be a Unix command
+my $cmdline_command = '';
+$cmdline_command = join(' ', @ARGV) if (@ARGV);
+
+# Get default configuration (hardcoded default options + configuration file)
+my $system_config = PHPJobs::System::Config->new($cmdline_conf_file_path);
+my $client_config = $system_config->getConfigurationForTarget($target);
+
+# Override it by taking command-line options into account
+map { $client_config->{'extra_headers'}->{$_} = $cmdline_extra_headers{$_}; } keys(%cmdline_extra_headers);
+$client_config->{'secure'} = $cmdline_secure if (defined($cmdline_secure));
+$client_config->{'read_secret_from'} = $cmdline_read_secret_from if (defined($cmdline_read_secret_from));
+
+# Read secret if needed
+if ($client_config->{'secure'}) {
+	$secret = read_secret($target, $client_config->{'read_secret_from'}, $batch);
+}
+
+# Initialize our PHPJobs client object
+my $my_client = new PHPJobs::System::Client(
+	'jobs_remote_url' => $client_config->{'target_url'},
+	'extra_headers' => $client_config->{'extra_headers'},
+	'debug' => $debug,
+	'secure' => $client_config->{'secure'},
+	'secret' => $secret
+);
+
+# Handle non-interactive execution
+my $rc = 0;
+if (length($cmdline_command)) {
+	$rc = $my_client->executeCommand($cmdline_command);
+	exit($rc);
+}
+
+# Handle interactive execution
+# Analyze the remote environment: username, hostname and current directory
+my $username = '';
+my $hostname = '';
+my $old_cwd;
+my $new_cwd;
+my $cwd = '';
+
+$rc = $my_client->executeCommand(
+	q[echo $(whoami)@$(hostname):$(pwd)],
+	$cwd,
+	{'fetch_err' => 0, 'callback_out' => '::set_prompt'}
+);
+
+my $term = Term::ReadLine->new($username . '@' . $hostname);
+$term->ornaments(0);
+my $OUT = $term->OUT || \*STDOUT;
+my $command;
+while (defined($command = $term->readline(prompt()))) {
+	# ignore empty commands
+	next if ($command !~ /\S/);
+	
+	$term->addhistory($command);
+	
+	# split read command for further analysis
+	my @args = split(/ /, $command);
+	
+	# Handle "exit" commands
+	if ($args[0] eq 'exit') {
+		last;
+	}
+	
+	# Handle cd commands
+	if ($args[0] eq 'cd') {
+		# Handle "-" special destination
+		if ($args[1] eq '-') {
+			if (!defined($old_cwd)) {
+				print STDERR "cd: old_cwd not set\n";
+				next;
+			}
+			else {
+				$command = sprintf('cd "%s"', $old_cwd);
+			}
+		}
+		
+		# add an echo statement to the command so we get notified of the new cwd
+		$command .= '; echo pwd=$(pwd)';
+		$new_cwd = '';
+		$rc = $my_client->executeCommand(
+			$command,
+			$cwd,
+			{
+				'callback_out' => sub { $new_cwd .= $_[0]; }
+			}
+		);
+		if ($rc == 0 && $new_cwd =~ m#^pwd=(.*)$# && ($1 ne $cwd)) {
+			 ($old_cwd, $cwd) = ($cwd, $1);
+		}
+		next;
+	}
+	
+	# Handle regular commands
+	$rc = $my_client->executeCommand($command, $cwd);
+}
+print "\n";
+
+# callback sub for this specific purpose
+sub set_prompt {
+	my $prompt = $_[0];
+	chomp $prompt;
+	($username, $hostname, $cwd) = ($prompt =~ m#([^@]*)@([^:]*):(.*)$#);
+}
+
+sub prompt {
+	my $prompt = '[%d][%02d:%02d:%02d][%s]{%s}%s %s ';
+	my $user_sign = $username eq 'root' ? '#' : '$';
+	my @time = localtime(time());
+	return sprintf(
+		$prompt,
+		$rc,
+		$time[2], $time[1], $time[0],
+		$username,
+		$hostname,
+		$cwd,
+		$user_sign
+	);
+}
+
+sub read_secret {
+	my $target = shift;
+	my $read_secret_from = shift;
+	my $batch = shift;
+	
+	my $secret = '';
+	if ($read_secret_from eq '-') {
+		$secret = read_secret_from_keyboard($target, $batch);
+	}
+	else {
+		$secret = read_secret_from_file($target, $read_secret_from);
+		if (!length($secret)) {
+			$secret = read_secret_from_keyboard($target, $batch);
+		}
+	}
+	
+	if (!length($secret)) {
+		die 'Got empty secret, aborting';
+	}
+	return $secret;
+}
+
+sub read_secret_from_file {
+	my $target = shift;
+	my $read_secret_from = shift;
+	
+	my $secret;
+	my $secret_fh;
+	if (!open($secret_fh, '<', $read_secret_from)) {
+		warn sprintf('Unable to read secret file %s: %s', $read_secret_from, $!);
+	}
+	else {
+		$secret = <$secret_fh>;
+		close($secret_fh);
+		chomp($secret);
+		if (!length($secret)) {
+			warn sprintf('got empty secret for target %s', $target);
+		}
+	}
+	return $secret;
+}
+
+sub read_secret_from_keyboard {
+	my $target = shift;
+	my $batch = shift;
+	if ($batch) {
+		die sprintf('Batch mode enforced: cannot read secret for %s from keyboard', $target);
+	}
+	return read_password(sprintf('Please enter secret for %s: ', $target));
+}
+
+sub usage {
+	printf('Usage: %s [OPTION]... URL|host' . "\n", $0);
+	exit(shift || 0);
+}

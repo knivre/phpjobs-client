@@ -1,0 +1,7 @@
+PHPJobs is a small set of scripts to start and manage php-cli jobs running in
+the background of a PHP-enabled HTTP server.
+PHPJobs-Client intends to provide:
+* a Perl library implementing the HTTP-based protocol of PHPJobs
+* various tools to operate with the default job types offered by PHPJobs
+
+This software is licensed under WTFPL.
