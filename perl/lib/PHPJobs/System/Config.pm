@@ -111,6 +111,9 @@ sub getConfigurationDirectivesForTarget {
 			if (!@matches) {
 				@matches = (m#^\s*(Header)\s+(\S+)\s+(\S+)\s*$#i);
 			}
+			if (!@matches) {
+				@matches = (m#^\s*(Alias)\s+(\S+)\s+(.+)\s*#i);
+			}
 			push(@target_conf, \@matches) if (@matches);
 		}
 	}
@@ -141,6 +144,7 @@ sub getConfigurationForTarget {
 	my $secure = 0;
 	my $read_secret_from = '-';
 	my %extra_headers = ();
+	my %aliases = ();
 	
 	# Take configuration directives into account
 	foreach my $conf_line (@{$target_directives}) {
@@ -173,12 +177,16 @@ sub getConfigurationForTarget {
 				$extra_headers{$header} = $value;
 			}
 		}
+		elsif ($directive =~ m#^Alias$#i) {
+			$aliases{ @{$conf_line}[1] } = @{$conf_line}[2];
+		}
 	}
 	
 	$target_conf{'target_url'} = $target_url;
 	$target_conf{'secure'} = $secure;
 	$target_conf{'read_secret_from'} = $read_secret_from;
 	$target_conf{'extra_headers'} = \%extra_headers;
+	$target_conf{'aliases'} = \%aliases;
 	return \%target_conf;
 }
 

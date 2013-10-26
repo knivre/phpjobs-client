@@ -89,9 +89,12 @@ $term->ornaments(0);
 my $OUT = $term->OUT || \*STDOUT;
 my $command_line;
 my $command;
+my $alias;
 while (defined($command_line = $term->readline(prompt()))) {
-	# ignore empty commands
+	# ignore empty commands, get rid of leading and trailing spaces
 	next if ($command_line !~ /\S/);
+	$command_line =~ s/^\s+//;
+	$command_line =~ s/\s+$//;
 	
 	$term->addhistory($command_line);
 	
@@ -131,6 +134,10 @@ while (defined($command_line = $term->readline(prompt()))) {
 			 ($old_cwd, $cwd) = ($cwd, $1);
 		}
 		next;
+	}
+	elsif (grep(m/\Q$command\E/, keys(%{ $client_config->{'aliases'} })) ) {
+		$alias = $client_config->{'aliases'}->{$command};
+		$command_line =~ s{^\Q$command\E}{$alias};
 	}
 	
 	# Handle regular commands
