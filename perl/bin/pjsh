@@ -96,7 +96,7 @@ while (defined($command_line = $term->readline(prompt()))) {
 	$term->addhistory($command_line);
 	
 	# split read command for further analysis
-	my @args = split(/ /, $command_line);
+	my @args = split(/\s+/, $command_line);
 	$command = $args[0];
 	
 	# Handle "exit" commands
