@@ -5,8 +5,22 @@ our @ISA = ('PHPJobs::Client');
 sub new {
 	my $class = shift;
 	my $self = PHPJobs::Client->new(@_);
+	$self->{'env_vars'} = ();
 	bless $self, $class;
 	return $self;
+}
+
+sub setEnvironmentVariable() {
+	$self = shift;
+	$env_var_name = shift;
+	$env_var_value = shift;
+	$self->{'env_vars'}->{$env_var_name} = $env_var_value;
+}
+
+sub unsetEnvironmentVariable() {
+	$self = shift;
+	$env_var_name = shift;
+	$self->{'env_vars'}->{$env_var_name} = undef;
 }
 
 sub executeCommand {
@@ -24,8 +38,26 @@ sub executeCommand {
 		map { $options{$_} = $user_options->{$_}; } (keys(%{$user_options}));
 	}
 	
+	# Prepare arguments:
+	# 1 - command line and current working directory
+	$post_arguments = {'command' => $command_string, 'cwd' => $cwd};
+	
+	# 2 - environment variables
+	$i = 0;
+	foreach my $env_var_name (keys(%{ $self->{'env_vars'} })) {
+		$env_string = $env_var_name;
+		# Environment variables associated to the undef value are to be unset;
+		# this is achieved by sending only "NAME" instead of the usual
+		# "NAME=VALUE" syntax.
+		if (defined($self->{'env_vars'}->{$env_var_name})) {
+			$env_string .= '=' . $self->{'env_vars'}->{$env_var_name};
+		}
+		$post_arguments->{'env' . $i} = $env_string;
+		++ $i;
+	}
+	
 	# start given command
-	my $command = $self->newJob('system', 'plcl', {}, {'command' => $command_string, 'cwd' => $cwd});
+	my $command = $self->newJob('system', 'plcl', {}, $post_arguments);
 	$command->run();
 	# do not do anything until we have a first status
 	$command->pollUntilStatus();

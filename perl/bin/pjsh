@@ -110,9 +110,9 @@ while (defined($command_line = $term->readline(prompt()))) {
 	# Handle cd commands
 	if ($command eq 'cd') {
 		# Handle "-" special destination
-		if ($args[1] eq '-') {
+		if (@args > 1 && $args[1] eq '-') {
 			if (!defined($old_cwd)) {
-				print STDERR "cd: old_cwd not set\n";
+				print STDERR "-pjsh: cd: old_cwd not set\n";
 				next;
 			}
 			else {
@@ -132,6 +132,33 @@ while (defined($command_line = $term->readline(prompt()))) {
 		);
 		if ($rc == 0 && $new_cwd =~ m#^pwd=(.*)$# && ($1 ne $cwd)) {
 			 ($old_cwd, $cwd) = ($cwd, $1);
+		}
+		next;
+	}
+	elsif ($command eq 'export' && @args > 1) {
+		shift @args;
+		foreach my $arg (@args) {
+			if ($arg =~ m#^([A-Za-z_][A-Za-z_0-9]*)=(.*)$#) {
+				$my_client->setEnvironmentVariable($1, $2);
+			}
+			elsif ($arg =~ m#^([A-Za-z_][A-Za-z_0-9]*)$#) {
+				$my_client->setEnvironmentVariable($1, '');
+			}
+			else {
+				printf(STDERR '-pjsh: export: `%s\': not a valid identifier', $arg);
+			}
+		}
+		next;
+	}
+	elsif ($command eq 'unset' && @args > 1) {
+		shift @args;
+		foreach my $arg (@args) {
+			if ($arg =~ m#^([A-Za-z_][A-Za-z_0-9]*)$#) {
+				$my_client->unsetEnvironmentVariable($1);
+			}
+			else {
+				printf(STDERR '-pjsh:unset: `%s\': not a valid identifier', $arg);
+			}
 		}
 		next;
 	}
