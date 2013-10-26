@@ -87,23 +87,25 @@ $rc = $my_client->executeCommand(
 my $term = Term::ReadLine->new($username . '@' . $hostname);
 $term->ornaments(0);
 my $OUT = $term->OUT || \*STDOUT;
+my $command_line;
 my $command;
-while (defined($command = $term->readline(prompt()))) {
+while (defined($command_line = $term->readline(prompt()))) {
 	# ignore empty commands
-	next if ($command !~ /\S/);
+	next if ($command_line !~ /\S/);
 	
-	$term->addhistory($command);
+	$term->addhistory($command_line);
 	
 	# split read command for further analysis
-	my @args = split(/ /, $command);
+	my @args = split(/ /, $command_line);
+	$command = $args[0];
 	
 	# Handle "exit" commands
-	if ($args[0] eq 'exit') {
+	if ($command eq 'exit') {
 		last;
 	}
 	
 	# Handle cd commands
-	if ($args[0] eq 'cd') {
+	if ($command eq 'cd') {
 		# Handle "-" special destination
 		if ($args[1] eq '-') {
 			if (!defined($old_cwd)) {
@@ -111,15 +113,15 @@ while (defined($command = $term->readline(prompt()))) {
 				next;
 			}
 			else {
-				$command = sprintf('cd "%s"', $old_cwd);
+				$command_line = sprintf('cd "%s"', $old_cwd);
 			}
 		}
 		
 		# add an echo statement to the command so we get notified of the new cwd
-		$command .= '; echo pwd=$(pwd)';
+		$command_line .= '; echo pwd=$(pwd)';
 		$new_cwd = '';
 		$rc = $my_client->executeCommand(
-			$command,
+			$command_line,
 			$cwd,
 			{
 				'callback_out' => sub { $new_cwd .= $_[0]; }
@@ -132,7 +134,7 @@ while (defined($command = $term->readline(prompt()))) {
 	}
 	
 	# Handle regular commands
-	$rc = $my_client->executeCommand($command, $cwd);
+	$rc = $my_client->executeCommand($command_line, $cwd);
 }
 print "\n";
 
