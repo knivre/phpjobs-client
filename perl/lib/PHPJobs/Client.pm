@@ -3,7 +3,6 @@ use PHPJobs::Job;
 use URI::Escape;
 use LWP::UserAgent;
 use Data::Dumper;
-use JSON;
 use Digest::SHA qw(sha256_hex);
 
 # This class provides an abstraction layer to send HTTP requests to a PHPJobs

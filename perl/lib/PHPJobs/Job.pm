@@ -1,6 +1,7 @@
 package PHPJobs::Job;
 use PHPJobs::Client;
 use LWP::UserAgent;
+use Scalar::Util;
 use Data::Dumper;
 use URI::Escape;
 use JSON;
@@ -174,8 +175,20 @@ sub checkHTTPResponse {
 	PHPJobs::Job::checkHTTPStatus($http_response);
 	
 	# we also expect a JSON-formatted HTTP response
-	my $response_hash = decode_json($http_response->{'_content'});
-	# TODO test whether JSON decoding has failed (how? doc is unclear)
+	my $response_hash;
+	eval {
+		# decode_json may die, typically with the following message:
+		# "malformed JSON string, neither array, object, number, string or atom"
+		$response_hash = decode_json($http_response->{'_content'});
+		
+		# PHPJobs server may return an empty result, which will be translated to
+		# an empty array in JSON ('[]') but also in Perl. Handle this case.
+		$response_hash = {} if (ref($response_hash) eq 'ARRAY');
+		1;
+	}
+	or do {
+		$response_hash = {};
+	};
 	
 	return $response_hash;
 }

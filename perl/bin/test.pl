@@ -2,7 +2,7 @@
 use strict;
 use warnings;
 use Data::Dumper;
-use Test::Simple tests => 48;
+use Test::Simple tests => 49;
 use JSON;
 
 ##### tests for PHPJobs::Client #####
@@ -149,6 +149,19 @@ ok(defined($job_status->{'type'}) && $job_status->{'type'} eq 'system', "Job cla
 ok(defined($job_status->{'name'}) && $job_status->{'name'} eq $new_job->name(), "Job class: status returns the expected name");
 ok(defined($job_status->{'last_update_time'}), "Job class: status returns last update time.");
 
+# Test how the class reacts upon reception of an empty JSON array '[]' as response.
+my $expected_error = '';
+my $fake_job = $client->newJob('system', 'zyxwvutsrqponm', {}, {});
+$fake_job->{'_name'} = 'zyxwvutsrqponm';
+eval {
+	$fake_job->status();
+	1;
+}
+or do {
+	$expected_error = $@;
+};
+ok($expected_error =~ /^Expected single key in JSON response/, "Job class: status() raises the expected exception upon reception of an empty response");
+
 my $all_right = 1;
 eval {
 	my $long_job = $client->newJob('system', undef, {}, {'command' => 'sleep 60'})->run();
@@ -162,7 +175,7 @@ or do {
 };
 ok($all_right, "Job class: run, poll and kill succeeded");
 
-my $expected_error = '';
+$expected_error = '';
 eval {
 	$client->newJob('system', undef, {}, {'command' => 'sleep 60'})->kill(9);
 	1;
