@@ -215,7 +215,7 @@ sub checkSingleKey {
 	my $hash = shift;
 	my $expected_key = shift;
 	if (keys(%{$hash}) != 1) {
-		die(sprintf('Expected single key in JSON response, found %d', keys(%{$hash})));
+		die(sprintf('Expected single key in JSON response, found %d', scalar(keys(%{$hash}))));
 	}
 	$first_key = (keys %{$hash})[0];
 	# optionally check the first key against the provided one
