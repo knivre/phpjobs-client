@@ -13,16 +13,16 @@ sub new {
 	return $self;
 }
 
-# return the default filepath this class looks for, typically ~/.pjsh/config
+# return the default filepath this class looks for, typically ~/.phpjobs/config
 sub defaultConfigFilePath {
-	return sprintf('%s/.pjsh/config', $ENV{'HOME'});
+	return sprintf('%s/.phpjobs/config', $ENV{'HOME'});
 }
 
 # return the filepath to be used according to the environment
 sub environmentConfigFilePath {
 	my $conf_file_path = PHPJobs::System::Config->defaultConfigFilePath();
 	
-	my $pjsh_env_var = 'PJSH_CONFIG';
+	my $pjsh_env_var = 'PHPJOBS_CONFIG';
 	if (defined($ENV{$pjsh_env_var})) {
 		if (! -f $ENV{$pjsh_env_var}) {
 			warn sprintf('%s mentions non-existent or non-regular file %s, ignoring', $pjsh_env_var, $ENV{$pjsh_env_var});
