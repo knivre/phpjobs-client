@@ -121,10 +121,12 @@ sub status {
 	$http_response = $self->{'_client'}->sendStatusRequest(
 		{
 			'filter' => 'type',
+			'op' => 'eq',
 			'token' => $self->{'_type'}
 		},
 		{
 			'filter' => 'name',
+			'op' => 'eq',
 			'token' => $self->{'_name'}
 		}
 	);
