@@ -29,7 +29,7 @@ sub type {
 
 sub setType {
 	my ($self, $type) = @_;
-	PHPJobs::Job::checkJobIdentifier('job type', $type);
+	PHPJobs::Job::checkJobIdentifier('job type', $type, sub { return $_[0] =~  m#^[a-zA-Z0-9_]+$#; });
 	$self->{'_type'} = $type;
 }
 
@@ -39,13 +39,14 @@ sub name {
 
 sub setName {
 	my ($self, $name) = @_;
-	PHPJobs::Job::checkJobIdentifier('job name', $name);
+	PHPJobs::Job::checkJobIdentifier('job name', $name, sub { return $_[0] =~  m#^[a-zA-Z0-9_-]+$#; });
 	$self->{'_name'} = $name;
 }
 
 sub checkJobIdentifier {
 	my $string_semantic = shift;
 	my $string_value = shift;
+	my $check_sub = shift;
 	
 	if (!defined($string_value)) {
 		croak($string_semantic . ' should not be undefined');
@@ -55,7 +56,7 @@ sub checkJobIdentifier {
 		croak($string_semantic . ' should not be empty');
 	}
 	
-	if ($string_value !~ m#^[a-zA-Z0-9_-]+$#) {
+	if (!$check_sub->($string_value)) {
 		croak(
 			sprintf(
 				'%s "%s" contains forbidden characters',
