@@ -1,0 +1,157 @@
+#!/usr/bin/perl -w
+use strict;
+use File::Temp;
+use Getopt::Long qw(:config gnu_getopt);
+use PHPJobs::Config;
+use PHPJobs::ReadSecret;
+use PHPJobs::Crontab::Client;
+
+# TODO pod documentation
+
+my $target;
+my $secret;
+
+# Default options
+my $batch = 0;
+my $debug = 0;
+
+# Parse command-line options, taking --batch and --debug directly into account.
+my $cmdline_conf_file_path;
+my %cmdline_extra_headers;
+my $cmdline_secure;
+my $cmdline_read_secret_from;
+my $cmdline_edit;
+my $cmdline_list;
+exit(1) unless GetOptions(
+	'b|batch' => \$batch,
+	'c|conf-file=s' => \$cmdline_conf_file_path,
+	'd|debug!' => \$debug,
+	'H|extra-header=s' => \%cmdline_extra_headers,
+	'secure!' => \$cmdline_secure,
+	'read-secret-from=s' => \$cmdline_read_secret_from,
+	'e!' => \$cmdline_edit,
+	'l!' => \$cmdline_list,
+);
+
+# There must remain at least one argument: the target.
+&usage() unless (@ARGV);
+$target = shift;
+
+# We may also receive a last argument: a file with the new crontab to setup.
+my $cmdline_input_file = shift;
+
+# However, such an argument implies -l and -e were not set.
+&usage() if (defined($cmdline_input_file) && ($cmdline_list || $cmdline_edit));
+
+# Of course, we cannot accept both -l and -e at the same time.
+&usage() if ($cmdline_list && $cmdline_edit);
+
+# Also, -e (interactive edition) does not make sense along with -b (batch).
+if ($batch && $cmdline_edit) {
+	printf STDERR "Batch mode and -e are mutually exclusive.\n";
+	&usage(1);
+}
+
+# Get default configuration (hardcoded default options + configuration file).
+my $system_config = PHPJobs::Config->new($cmdline_conf_file_path);
+my $client_config = $system_config->getConfigurationForTarget($target);
+
+# Override it by taking command-line options into account.
+map { $client_config->{'extra_headers'}->{$_} = $cmdline_extra_headers{$_}; } keys(%cmdline_extra_headers);
+$client_config->{'secure'} = $cmdline_secure if (defined($cmdline_secure));
+$client_config->{'read_secret_from'} = $cmdline_read_secret_from if (defined($cmdline_read_secret_from));
+
+# Read secret if needed
+if ($client_config->{'secure'}) {
+	$secret = PHPJobs::ReadSecret::read_secret($target, $client_config->{'read_secret_from'}, $batch);
+}
+
+# Initialize our PHPJobs client object
+my $my_client = new PHPJobs::Crontab::Client(
+	'jobs_remote_url' => $client_config->{'target_url'},
+	'extra_headers' => $client_config->{'extra_headers'},
+	'debug' => $debug,
+	'secure' => $client_config->{'secure'},
+	'secret' => $secret
+);
+
+if ($cmdline_edit) {
+	# We are required to interactively edit the crontab.
+
+	# Compute the path to a temporary file
+	my $tmp_dir = mkdtemp(&get_tmp_dir() . '/pjcrontab.XXXXXX');
+	my $tmp_file = $tmp_dir . '/crontab';
+
+	# Store the current crontab to that temporary file.
+	open(my $tmp_fh, '>', $tmp_file)
+		or die(sprintf('Unable to open temporary file %s: %s', $tmp_file, $!));
+	print $tmp_fh $my_client->get()
+		or die(sprintf('Error while writing new crontab to %s: %s', $tmp_file, $!));
+	close($tmp_fh)
+		or die(sprintf('Unable to close temporary file%s: %s', $tmp_file, $!));
+
+	# Check its mtime before interactive edition.
+	my @tmp_file_stat = stat($tmp_file);
+	my $tmp_file_init_mtime = $tmp_file_stat[9];
+
+	# Interactively edit the temporary file.
+	system(&get_editor() . ' ' . $tmp_file);
+
+	# Check its mtime after interactive edition.
+	@tmp_file_stat = stat($tmp_file);
+	my $tmp_file_edit_mtime = $tmp_file_stat[9];
+
+	# Decide whether to apply the new crontab or not.
+	if ($tmp_file_edit_mtime > $tmp_file_init_mtime) {
+		print $my_client->setFromFile($tmp_file);
+	}
+	else {
+		print STDERR 'No modification made' . "\n";
+	}
+
+	# Clean up temporary files and directories.
+	unlink($tmp_file);
+	rmdir($tmp_dir);
+}
+elsif (defined($cmdline_input_file)) {
+	# We are required to replace the current crontab with the content of the
+	# provided file.
+	if ($cmdline_input_file eq '-') {
+		print $my_client->setFromFileHandle(\*STDIN);
+	}
+	else {
+		print $my_client->setFromFile($cmdline_input_file);
+	}
+}
+else {
+	# We are simply required to output the current crontab.
+	print $my_client->get();
+}
+
+sub usage {
+	printf('Usage:  %s [OPTION] { URL | host } file' . "\n", $0);
+	printf('        %s [OPTION] { URL | host } { -e | -l }' . "\n", $0);
+	printf('                (default operation is list)' . "\n");
+	printf('        -e      (edit user\'s crontab)' . "\n");
+	printf('        -l      (list user\'s crontab)' . "\n");
+	exit(shift || 0);
+}
+
+sub get_editor {
+	if (defined($ENV{'VISUAL'}) && length($ENV{'VISUAL'})) {
+		return $ENV{'VISUAL'};
+	}
+	if (defined($ENV{'EDITOR'}) && length($ENV{'EDITOR'})) {
+		return $ENV{'EDITOR'};
+	}
+	return '/usr/bin/editor';
+}
+
+sub get_tmp_dir {
+	if (defined($ENV{'TMPDIR'}) && length($ENV{'TMPDIR'})) {
+		if (-d $ENV{'TMPDIR'}) {
+			return $ENV{'TMPDIR'};
+		}
+	}
+	return '/tmp';
+}
