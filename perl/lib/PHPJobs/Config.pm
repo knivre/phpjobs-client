@@ -1,4 +1,4 @@
-package PHPJobs::System::Config;
+package PHPJobs::Config;
 use File::Basename;
 use PHPJobs::Client;
 
@@ -20,7 +20,7 @@ sub defaultConfigFilePath {
 
 # return the filepath to be used according to the environment
 sub environmentConfigFilePath {
-	my $conf_file_path = PHPJobs::System::Config->defaultConfigFilePath();
+	my $conf_file_path = PHPJobs::Config->defaultConfigFilePath();
 	
 	my $pjsh_env_var = 'PHPJOBS_CONFIG';
 	if (defined($ENV{$pjsh_env_var})) {

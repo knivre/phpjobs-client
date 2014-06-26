@@ -4,7 +4,7 @@ use Getopt::Long qw(:config gnu_getopt);
 use Term::ReadLine;
 use PHPJobs::ReadSecret;
 use PHPJobs::System::Client;
-use PHPJobs::System::Config;
+use PHPJobs::Config;
 
 # TODO pod documentation
 
@@ -41,7 +41,7 @@ my $cmdline_command = '';
 $cmdline_command = join(' ', @ARGV) if (@ARGV);
 
 # Get default configuration (hardcoded default options + configuration file)
-my $system_config = PHPJobs::System::Config->new($cmdline_conf_file_path);
+my $system_config = PHPJobs::Config->new($cmdline_conf_file_path);
 my $client_config = $system_config->getConfigurationForTarget($target);
 
 # Override it by taking command-line options into account
